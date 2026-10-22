@@ -1,97 +1,894 @@
-<!doctype html>
-<html lang="en" class="dark">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interactive Solar System Explorer</title>
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-    />
     <style>
-      /* 内联样式确保主题色立即生效，避免闪烁 */
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-      }
-      html.light,
-      html.light body {
-        background-color: #ffffff !important;
-        color: #000000;
-      }
-      html.dark,
-      html.dark body {
-        background-color: #1a1a1a !important;
-        color: #ffffff;
-      }
-    </style>
-    <script>
-      // 在 React 加载前立即设置主题，避免闪烁
-      (function () {
-        const isInIframe = window.self !== window.top;
-
-        function applyThemeToDOM(theme) {
-          document.documentElement.classList.remove("light", "dark");
-          document.documentElement.classList.add(theme);
-          document.documentElement.setAttribute("data-theme", theme);
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        if (isInIframe) {
-          // 监听父窗口主动推送的主题消息
-          window.addEventListener("message", function (event) {
-            if (event.data && typeof event.data.theme === "string") {
-              const theme = event.data.theme;
-              if (theme === "light" || theme === "dark") {
-                applyThemeToDOM(theme);
-              }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0a0a1a;
+            color: white;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            background: linear-gradient(to right, #fde047, #fb923c, #ef4444);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: #9ca3af;
+            font-size: 0.875rem;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        @media (min-width: 1024px) {
+            .main-content {
+                flex-direction: row;
+                align-items: flex-start;
             }
-          });
-        } else {
-          // 非 iframe 环境，使用默认 light 主题
-          applyThemeToDOM("light");
         }
-      })();
-    </script>
-      <script>
-      (function () {
-        if (window.self === window.top) return;
-        var reported = {};
-        window.addEventListener("error", function (event) {
-          // 资源加载失败的 error 事件没有 message，此处仅上报 JS 运行时错误
-          if (!event || !event.message) return;
-          var key =
-            event.message + "|" + (event.filename || "") + "|" + (event.lineno || 0);
-          if (reported[key]) return; // 相同错误只上报一次，避免渲染循环刷屏
-          reported[key] = true;
-          try {
-            window.parent.postMessage(
-              {
-                type: "sandbox-runtime-error",
-                payload: {
-                  message: String(event.message).slice(0, 500),
-                  filename: event.filename || "",
-                  lineno: event.lineno || 0,
-                  colno: event.colno || 0,
-                  stack:
-                    event.error && event.error.stack
-                      ? String(event.error.stack).slice(0, 2000)
-                      : ""
-                }
-              },
-              "*"
+
+        .canvas-wrapper {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        canvas {
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            cursor: default;
+        }
+
+        .side-panel {
+            width: 100%;
+            max-width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        @media (min-width: 1024px) {
+            .side-panel {
+                width: 320px;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            transition: all 0.3s;
+        }
+
+        .panel-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #d1d5db;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 12px;
+        }
+
+        .planet-info {
+            opacity: 0.6;
+        }
+
+        .planet-info.active {
+            opacity: 1;
+        }
+
+        .planet-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .planet-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        .planet-name {
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+
+        .planet-symbol {
+            color: #9ca3af;
+            font-size: 0.875rem;
+        }
+
+        .planet-description {
+            color: #d1d5db;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .info-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #9ca3af;
+            font-size: 0.75rem;
+        }
+
+        .info-value {
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-weight: 500;
+            font-size: 0.875rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-play {
+            background: rgba(249, 115, 22, 0.2);
+            color: #fdba74;
+            border: 1px solid rgba(249, 115, 22, 0.3);
+        }
+
+        .btn-play:hover {
+            background: rgba(249, 115, 22, 0.3);
+        }
+
+        .btn-play.paused {
+            background: rgba(34, 197, 94, 0.2);
+            color: #86efac;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .btn-play.paused:hover {
+            background: rgba(34, 197, 94, 0.3);
+        }
+
+        .btn-labels {
+            background: rgba(59, 130, 246, 0.2);
+            color: #93c5fd;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-labels:hover {
+            background: rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-labels.off {
+            background: rgba(107, 114, 128, 0.2);
+            color: #9ca3af;
+            border: 1px solid rgba(107, 114, 128, 0.3);
+        }
+
+        .btn-labels.off:hover {
+            background: rgba(107, 114, 128, 0.3);
+        }
+
+        .speed-control {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .speed-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .speed-label {
+            font-size: 0.75rem;
+            color: #9ca3af;
+        }
+
+        .speed-value {
+            font-size: 0.75rem;
+            font-family: monospace;
+            color: #fde047;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(to right, #374151, #4b5563);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #facc15;
+            border: 2px solid #fef08a;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(250, 204, 21, 0.4);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #facc15;
+            border: 2px solid #fef08a;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(250, 204, 21, 0.4);
+        }
+
+        .speed-presets {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .preset-btn {
+            flex: 1;
+            padding: 6px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: #9ca3af;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .preset-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .preset-btn.active {
+            background: rgba(250, 204, 21, 0.3);
+            color: #fde047;
+            border: 1px solid rgba(250, 204, 21, 0.4);
+        }
+
+        .planet-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+
+        .planet-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            border: 1px solid transparent;
+            background: transparent;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+
+        .planet-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .planet-btn.selected {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .planet-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 24px 0;
+        }
+
+        .empty-state-icon {
+            font-size: 2.5rem;
+            margin-bottom: 8px;
+        }
+
+        .empty-state-text {
+            color: #9ca3af;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌌 Solar System Explorer</h1>
+            <p class="subtitle">Click on any planet to learn more about it</p>
+        </header>
+
+        <div class="main-content">
+            <div class="canvas-wrapper">
+                <canvas id="solarSystem"></canvas>
+            </div>
+
+            <div class="side-panel">
+                <div class="panel planet-info" id="planetInfo">
+                    <div class="empty-state" id="emptyState">
+                        <div class="empty-state-icon">🪐</div>
+                        <div class="empty-state-text">Click on a planet to see its details</div>
+                    </div>
+                    <div id="planetDetails" style="display: none;">
+                        <div class="planet-header">
+                            <div class="planet-icon" id="planetIcon"></div>
+                            <div>
+                                <div class="planet-name" id="planetName"></div>
+                                <div class="planet-symbol" id="planetSymbol"></div>
+                            </div>
+                        </div>
+                        <div class="planet-description" id="planetDescription"></div>
+                        <div class="info-grid">
+                            <div class="info-row">
+                                <span class="info-label">Diameter</span>
+                                <span class="info-value" id="planetDiameter"></span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Distance from Sun</span>
+                                <span class="info-value" id="planetDistance"></span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Orbital Period</span>
+                                <span class="info-value" id="planetPeriod"></span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Relative Speed</span>
+                                <span class="info-value" id="planetSpeed"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Controls</div>
+                    <div class="controls">
+                        <div class="button-group">
+                            <button class="btn btn-play" id="playPauseBtn">⏸ Pause</button>
+                            <button class="btn btn-labels" id="labelsBtn">🏷 Labels On</button>
+                        </div>
+                        <div class="speed-control">
+                            <div class="speed-header">
+                                <span class="speed-label">Speed</span>
+                                <span class="speed-value" id="speedValue">1.0x</span>
+                            </div>
+                            <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="1">
+                            <div class="speed-presets">
+                                <button class="preset-btn" data-speed="0.5">0.5x</button>
+                                <button class="preset-btn active" data-speed="1">1x</button>
+                                <button class="preset-btn" data-speed="2">2x</button>
+                                <button class="preset-btn" data-speed="3">3x</button>
+                                <button class="preset-btn" data-speed="5">5x</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Planets</div>
+                    <div class="planet-list" id="planetList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Planet data
+        const planets = [
+            {
+                name: "Mercury",
+                color: "#b5b5b5",
+                radius: 4,
+                orbitRadius: 60,
+                diameter: 4879,
+                distanceFromSun: 57.9,
+                orbitalPeriod: 88,
+                orbitalSpeed: 4.15,
+                description: "The smallest planet and closest to the Sun. It has no atmosphere and extreme temperature variations.",
+                emoji: "☿"
+            },
+            {
+                name: "Venus",
+                color: "#e8cda0",
+                radius: 7,
+                orbitRadius: 90,
+                diameter: 12104,
+                distanceFromSun: 108.2,
+                orbitalPeriod: 225,
+                orbitalSpeed: 1.62,
+                description: "The hottest planet with a thick toxic atmosphere. It rotates in the opposite direction to most planets.",
+                emoji: "♀"
+            },
+            {
+                name: "Earth",
+                color: "#4da6ff",
+                radius: 7,
+                orbitRadius: 125,
+                diameter: 12756,
+                distanceFromSun: 149.6,
+                orbitalPeriod: 365,
+                orbitalSpeed: 1.0,
+                description: "Our home planet. The only known planet with liquid water on its surface and life.",
+                emoji: "🌍"
+            },
+            {
+                name: "Mars",
+                color: "#e07050",
+                radius: 5,
+                orbitRadius: 165,
+                diameter: 6792,
+                distanceFromSun: 227.9,
+                orbitalPeriod: 687,
+                orbitalSpeed: 0.53,
+                description: "The Red Planet. It has the largest volcano (Olympus Mons) and canyon in the solar system.",
+                emoji: "♂"
+            },
+            {
+                name: "Jupiter",
+                color: "#d4a574",
+                radius: 16,
+                orbitRadius: 220,
+                diameter: 142984,
+                distanceFromSun: 778.6,
+                orbitalPeriod: 4333,
+                orbitalSpeed: 0.084,
+                description: "The largest planet. Its Great Red Spot is a storm larger than Earth that has raged for centuries.",
+                emoji: "♃"
+            },
+            {
+                name: "Saturn",
+                color: "#f0d890",
+                radius: 14,
+                orbitRadius: 280,
+                diameter: 120536,
+                distanceFromSun: 1433.5,
+                orbitalPeriod: 10759,
+                orbitalSpeed: 0.034,
+                description: "Known for its stunning ring system made of ice and rock. It could float in water due to its low density.",
+                emoji: "♄"
+            },
+            {
+                name: "Uranus",
+                color: "#7ec8e3",
+                radius: 10,
+                orbitRadius: 330,
+                diameter: 51118,
+                distanceFromSun: 2872.5,
+                orbitalPeriod: 30687,
+                orbitalSpeed: 0.012,
+                description: "An ice giant that rotates on its side. It has a blue-green color due to methane in its atmosphere.",
+                emoji: "♅"
+            },
+            {
+                name: "Neptune",
+                color: "#4470e0",
+                radius: 9,
+                orbitRadius: 370,
+                diameter: 49528,
+                distanceFromSun: 4495.1,
+                orbitalPeriod: 60190,
+                orbitalSpeed: 0.006,
+                description: "The windiest planet with speeds up to 2,100 km/h. It's the farthest planet from the Sun.",
+                emoji: "♆"
+            }
+        ];
+
+        // State
+        let isPlaying = true;
+        let speed = 1;
+        let showLabels = true;
+        let selectedPlanet = null;
+        let hoveredPlanet = null;
+        let angles = planets.map(() => Math.random() * Math.PI * 2);
+        let stars = [];
+        let lastTime = 0;
+
+        // Canvas setup
+        const canvas = document.getElementById('solarSystem');
+        const ctx = canvas.getContext('2d');
+        let canvasSize = 800;
+
+        function resizeCanvas() {
+            const wrapper = canvas.parentElement;
+            const size = Math.min(wrapper.clientWidth, 700);
+            canvasSize = size;
+            canvas.width = size;
+            canvas.height = size;
+            
+            // Regenerate stars
+            stars = [];
+            for (let i = 0; i < 200; i++) {
+                stars.push({
+                    x: Math.random() * size,
+                    y: Math.random() * size,
+                    size: Math.random() * 1.5 + 0.5,
+                    brightness: Math.random() * 0.5 + 0.3
+                });
+            }
+        }
+
+        // Utility functions
+        function lightenColor(hex, percent) {
+            const num = parseInt(hex.replace("#", ""), 16);
+            const r = Math.min(255, (num >> 16) + percent);
+            const g = Math.min(255, ((num >> 8) & 0x00ff) + percent);
+            const b = Math.min(255, (num & 0x0000ff) + percent);
+            return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+        }
+
+        function formatOrbitalPeriod(days) {
+            if (days < 365) return `${days} days`;
+            const years = (days / 365.25).toFixed(1);
+            return `${years} years`;
+        }
+
+        // Drawing functions
+        function drawStars() {
+            stars.forEach(star => {
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${star.brightness})`;
+                ctx.fill();
+            });
+        }
+
+        function draw() {
+            const centerX = canvasSize / 2;
+            const centerY = canvasSize / 2;
+            const scale = canvasSize / 800;
+
+            // Clear canvas
+            ctx.fillStyle = "#0a0a1a";
+            ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+            // Draw stars
+            drawStars();
+
+            // Draw orbit paths
+            planets.forEach(planet => {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, planet.orbitRadius * scale, 0, Math.PI * 2);
+                ctx.strokeStyle = selectedPlanet?.name === planet.name
+                    ? "rgba(255, 255, 255, 0.4)"
+                    : "rgba(255, 255, 255, 0.1)";
+                ctx.lineWidth = selectedPlanet?.name === planet.name ? 2 : 1;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            });
+
+            // Draw Sun
+            const sunGradient = ctx.createRadialGradient(
+                centerX, centerY, 0,
+                centerX, centerY, 30 * scale
             );
-          } catch (e) {
-            /* 上报失败不影响页面运行 */
-          }
+            sunGradient.addColorStop(0, "#fff7e0");
+            sunGradient.addColorStop(0.3, "#ffcc00");
+            sunGradient.addColorStop(0.7, "#ff8800");
+            sunGradient.addColorStop(1, "#ff440040");
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 30 * scale, 0, Math.PI * 2);
+            ctx.fillStyle = sunGradient;
+            ctx.fill();
+
+            // Sun glow
+            const glowGradient = ctx.createRadialGradient(
+                centerX, centerY, 20 * scale,
+                centerX, centerY, 50 * scale
+            );
+            glowGradient.addColorStop(0, "rgba(255, 200, 0, 0.3)");
+            glowGradient.addColorStop(1, "rgba(255, 200, 0, 0)");
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 50 * scale, 0, Math.PI * 2);
+            ctx.fillStyle = glowGradient;
+            ctx.fill();
+
+            // Draw planets
+            planets.forEach((planet, index) => {
+                const angle = angles[index];
+                const x = centerX + Math.cos(angle) * planet.orbitRadius * scale;
+                const y = centerY + Math.sin(angle) * planet.orbitRadius * scale;
+                const r = planet.radius * scale;
+
+                // Planet glow
+                const planetGlow = ctx.createRadialGradient(x, y, 0, x, y, r * 2);
+                planetGlow.addColorStop(0, planet.color + "60");
+                planetGlow.addColorStop(1, planet.color + "00");
+                ctx.beginPath();
+                ctx.arc(x, y, r * 2, 0, Math.PI * 2);
+                ctx.fillStyle = planetGlow;
+                ctx.fill();
+
+                // Planet body
+                const planetGradient = ctx.createRadialGradient(
+                    x - r * 0.3, y - r * 0.3, 0,
+                    x, y, r
+                );
+                planetGradient.addColorStop(0, lightenColor(planet.color, 40));
+                planetGradient.addColorStop(1, planet.color);
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fillStyle = planetGradient;
+                ctx.fill();
+
+                // Saturn rings
+                if (planet.name === "Saturn") {
+                    ctx.beginPath();
+                    ctx.ellipse(x, y, r * 2, r * 0.5, 0.3, 0, Math.PI * 2);
+                    ctx.strokeStyle = "#f0d89080";
+                    ctx.lineWidth = 2 * scale;
+                    ctx.stroke();
+                }
+
+                // Selection highlight
+                if (selectedPlanet?.name === planet.name) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, r + 4 * scale, 0, Math.PI * 2);
+                    ctx.strokeStyle = "#ffffff";
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // Hover highlight
+                if (hoveredPlanet === planet.name) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, r + 3 * scale, 0, Math.PI * 2);
+                    ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                }
+
+                // Planet labels
+                if (showLabels) {
+                    ctx.font = `${11 * scale}px sans-serif`;
+                    ctx.fillStyle = selectedPlanet?.name === planet.name
+                        ? "#ffffff"
+                        : "rgba(255, 255, 255, 0.7)";
+                    ctx.textAlign = "center";
+                    ctx.fillText(planet.name, x, y - r - 6 * scale);
+                }
+            });
+        }
+
+        // Animation loop
+        function animate(time) {
+            if (!lastTime) lastTime = time;
+            const delta = (time - lastTime) / 1000;
+            lastTime = time;
+
+            if (isPlaying) {
+                planets.forEach((planet, index) => {
+                    angles[index] += planet.orbitalSpeed * speed * delta * 0.5;
+                });
+            }
+
+            draw();
+            requestAnimationFrame(animate);
+        }
+
+        // Event handlers
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const centerX = canvasSize / 2;
+            const centerY = canvasSize / 2;
+            const scale = canvasSize / 800;
+
+            let clicked = null;
+            planets.forEach((planet, index) => {
+                const angle = angles[index];
+                const px = centerX + Math.cos(angle) * planet.orbitRadius * scale;
+                const py = centerY + Math.sin(angle) * planet.orbitRadius * scale;
+                const dist = Math.sqrt((x - px) ** 2 + (y - py) ** 2);
+                if (dist < planet.radius * scale + 10) {
+                    clicked = planet;
+                }
+            });
+
+            selectedPlanet = clicked;
+            updatePlanetInfo();
+            updatePlanetList();
         });
-      })();
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const centerX = canvasSize / 2;
+            const centerY = canvasSize / 2;
+            const scale = canvasSize / 800;
+
+            let hovered = null;
+            planets.forEach((planet, index) => {
+                const angle = angles[index];
+                const px = centerX + Math.cos(angle) * planet.orbitRadius * scale;
+                const py = centerY + Math.sin(angle) * planet.orbitRadius * scale;
+                const dist = Math.sqrt((x - px) ** 2 + (y - py) ** 2);
+                if (dist < planet.radius * scale + 10) {
+                    hovered = planet.name;
+                }
+            });
+
+            hoveredPlanet = hovered;
+            canvas.style.cursor = hovered ? "pointer" : "default";
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            hoveredPlanet = null;
+        });
+
+        // UI update functions
+        function updatePlanetInfo() {
+            const infoPanel = document.getElementById('planetInfo');
+            const emptyState = document.getElementById('emptyState');
+            const details = document.getElementById('planetDetails');
+
+            if (selectedPlanet) {
+                infoPanel.classList.add('active');
+                emptyState.style.display = 'none';
+                details.style.display = 'block';
+
+                document.getElementById('planetIcon').style.background = 
+                    `radial-gradient(circle at 30% 30%, ${lightenColor(selectedPlanet.color, 40)}, ${selectedPlanet.color})`;
+                document.getElementById('planetName').textContent = selectedPlanet.name;
+                document.getElementById('planetSymbol').textContent = selectedPlanet.emoji;
+                document.getElementById('planetDescription').textContent = selectedPlanet.description;
+                document.getElementById('planetDiameter').textContent = `${selectedPlanet.diameter.toLocaleString()} km`;
+                document.getElementById('planetDistance').textContent = `${selectedPlanet.distanceFromSun} million km`;
+                document.getElementById('planetPeriod').textContent = formatOrbitalPeriod(selectedPlanet.orbitalPeriod);
+                document.getElementById('planetSpeed').textContent = `${selectedPlanet.orbitalSpeed}x Earth`;
+            } else {
+                infoPanel.classList.remove('active');
+                emptyState.style.display = 'block';
+                details.style.display = 'none';
+            }
+        }
+
+        function updatePlanetList() {
+            const list = document.getElementById('planetList');
+            list.innerHTML = '';
+            planets.forEach(planet => {
+                const btn = document.createElement('button');
+                btn.className = 'planet-btn' + (selectedPlanet?.name === planet.name ? ' selected' : '');
+                btn.innerHTML = `
+                    <div class="planet-dot" style="background-color: ${planet.color}"></div>
+                    <span>${planet.name}</span>
+                `;
+                btn.addEventListener('click', () => {
+                    selectedPlanet = planet;
+                    updatePlanetInfo();
+                    updatePlanetList();
+                });
+                list.appendChild(btn);
+            });
+        }
+
+        // Controls
+        document.getElementById('playPauseBtn').addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            const btn = document.getElementById('playPauseBtn');
+            btn.textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+            btn.classList.toggle('paused', !isPlaying);
+        });
+
+        document.getElementById('labelsBtn').addEventListener('click', () => {
+            showLabels = !showLabels;
+            const btn = document.getElementById('labelsBtn');
+            btn.textContent = showLabels ? '🏷 Labels On' : '🏷 Labels Off';
+            btn.classList.toggle('off', !showLabels);
+        });
+
+        document.getElementById('speedSlider').addEventListener('input', (e) => {
+            speed = parseFloat(e.target.value);
+            document.getElementById('speedValue').textContent = `${speed.toFixed(1)}x`;
+            updatePresetButtons();
+        });
+
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                speed = parseFloat(btn.dataset.speed);
+                document.getElementById('speedSlider').value = speed;
+                document.getElementById('speedValue').textContent = `${speed.toFixed(1)}x`;
+                updatePresetButtons();
+            });
+        });
+
+        function updatePresetButtons() {
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                const btnSpeed = parseFloat(btn.dataset.speed);
+                btn.classList.toggle('active', Math.abs(speed - btnSpeed) < 0.05);
+            });
+        }
+
+        // Initialize
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        updatePlanetList();
+        requestAnimationFrame(animate);
     </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+</body>
 </html>
